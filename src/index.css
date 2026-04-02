@@ -1,11 +1,77 @@
 @import "tailwindcss";
 
+:root {
+  /* LIGHT THEME (Calm & Clean) */
+  --bg-primary: #f0f4f8;
+  --bg-secondary: #ffffff;
+  --text-main: #2b394a;
+  --text-muted: #6b7c93;
+  --border-subtle: rgba(160, 180, 200, 0.4);
+  --board-outline: rgba(120, 150, 180, 0.5);
+  
+  --panel-bg: rgba(255, 255, 255, 0.85);
+  --panel-shadow: 0 8px 24px rgba(100, 120, 140, 0.12);
+  
+  --tile-light: #e8eef3;
+  --tile-dark: #ccdae8;
+  --tile-board-bg: #bacbdc;
+
+  --accent-move: #c6e0d8;
+  --accent-shoot: #fcdbd3;
+  --accent-selected: #93c5fd;
+
+  --piece-white-fill: #ffffff;
+  --piece-white-stroke: #b0c4de;
+  --piece-white-shadow: drop-shadow(0 4px 6px rgba(0,0,0,0.12));
+  
+  --piece-black-fill: #2c3e50;
+  --piece-black-stroke: #1a252f;
+  --piece-black-shadow: drop-shadow(0 4px 6px rgba(0,0,0,0.25));
+
+  --glow-selected: 0 0 0 5px rgba(59, 130, 246, 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* DARK THEME (Professional & Glowing) */
+    --bg-primary: #111823;
+    --bg-secondary: #1a2433;
+    --text-main: #e2e8f0;
+    --text-muted: #8ba2b8;
+    --border-subtle: rgba(70, 95, 125, 0.4);
+    --board-outline: rgba(80, 120, 160, 0.5);
+
+    --panel-bg: rgba(20, 31, 46, 0.75);
+    --panel-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+
+    --tile-light: #243447;
+    --tile-dark: #1b2737;
+    --tile-board-bg: #131d2a;
+
+    --accent-move: #1f423e;
+    --accent-shoot: #442621;
+    --accent-selected: #355774;
+
+    --piece-white-fill: #ffffff;
+    --piece-white-stroke: #94a3b8;
+    --piece-white-shadow: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+
+    --piece-black-fill: #020617;
+    --piece-black-stroke: #94a3b8;
+    --piece-black-shadow: drop-shadow(0 4px 8px rgba(0,0,0,0.9)) drop-shadow(0 0 3px rgba(148, 163, 184, 0.6));
+
+    --glow-selected: 0 0 0 5px rgba(96, 165, 250, 0.25);
+  }
+}
+
 body {
   margin: 0;
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 18% 12%, #3b4653 0%, #27303a 48%, #1f2731 100%);
-  color: #2f2a24;
+  background: var(--bg-primary);
+  color: var(--text-main);
+  transition: background-color 300ms ease, color 300ms ease;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
 }

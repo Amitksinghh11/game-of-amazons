@@ -4,14 +4,9 @@ const BLACK = 2
 const BURNED = 3
 
 const DIRECTIONS = [
-  [-1, -1],
-  [-1, 0],
-  [-1, 1],
-  [0, -1],
-  [0, 1],
-  [1, -1],
-  [1, 0],
-  [1, 1],
+  [-1, -1], [-1, 0], [-1, 1],
+  [0, -1],           [0, 1],
+  [1, -1],  [1, 0],  [1, 1],
 ]
 
 const INF = 1e9
@@ -36,7 +31,6 @@ const getPieces = (board, player) => {
 const getQueenRays = (board, fromR, fromC) => {
   const size = board.length
   const squares = []
-
   for (const [dr, dc] of DIRECTIONS) {
     let r = fromR + dr
     let c = fromC + dc
@@ -46,32 +40,51 @@ const getQueenRays = (board, fromR, fromC) => {
       c += dc
     }
   }
-
   return squares
 }
 
-const applyMove = (board, move, player) => {
-  const next = cloneBoard(board)
-  next[move.from.r][move.from.c] = EMPTY
-  next[move.to.r][move.to.c] = player
-  next[move.arrow.r][move.arrow.c] = BURNED
-  return next
+const getArrowRays = (board, fromR, fromC, ignoreR, ignoreC) => {
+  const size = board.length
+  const squares = []
+  for (const [dr, dc] of DIRECTIONS) {
+    let r = fromR + dr
+    let c = fromC + dc
+    while (inBounds(size, r, c) && (board[r][c] === EMPTY || (r === ignoreR && c === ignoreC))) {
+      squares.push({ r, c })
+      r += dr
+      c += dc
+    }
+  }
+  return squares
 }
+
+const applyMoveInline = (board, move, player) => {
+  board[move.from.r][move.from.c] = EMPTY
+  board[move.to.r][move.to.c] = player
+  board[move.arrow.r][move.arrow.c] = BURNED
+}
+
+const undoMoveInline = (board, move, player) => {
+  board[move.arrow.r][move.arrow.c] = EMPTY
+  board[move.to.r][move.to.c] = EMPTY
+  board[move.from.r][move.from.c] = player
+  if (move.arrow.r === move.from.r && move.arrow.c === move.from.c) {
+    board[move.from.r][move.from.c] = player
+  }
+}
+
 
 const generateMoves = (board, player, beamPerPiece = 16) => {
   const pieces = getPieces(board, player)
   const moves = []
+  const size = board.length
 
   for (const piece of pieces) {
     const pieceMoves = []
     const destinations = getQueenRays(board, piece.r, piece.c)
 
     for (const destination of destinations) {
-      const moved = cloneBoard(board)
-      moved[piece.r][piece.c] = EMPTY
-      moved[destination.r][destination.c] = player
-
-      const arrows = getQueenRays(moved, destination.r, destination.c)
+      const arrows = getArrowRays(board, destination.r, destination.c, piece.r, piece.c)
       for (const arrow of arrows) {
         pieceMoves.push({
           from: { r: piece.r, c: piece.c },
@@ -83,8 +96,8 @@ const generateMoves = (board, player, beamPerPiece = 16) => {
 
     if (pieceMoves.length > beamPerPiece) {
       pieceMoves.sort((a, b) => {
-        const aCenter = Math.abs(a.to.r - board.length / 2) + Math.abs(a.to.c - board.length / 2)
-        const bCenter = Math.abs(b.to.r - board.length / 2) + Math.abs(b.to.c - board.length / 2)
+        const aCenter = Math.abs(a.to.r - size / 2) + Math.abs(a.to.c - size / 2)
+        const bCenter = Math.abs(b.to.r - size / 2) + Math.abs(b.to.c - size / 2)
         return aCenter - bCenter
       })
       moves.push(...pieceMoves.slice(0, beamPerPiece))
@@ -168,16 +181,18 @@ const evaluate = (board, maxPlayer) => {
   return territory * 35 + mobility * 8 + reach * 6
 }
 
-const scoreMoveQuick = (board, move, player) => {
-  const next = applyMove(board, move, player)
+const scoreMoveQuickInline = (board, move, player) => {
+  applyMoveInline(board, move, player)
   const centerPull =
     Math.abs(move.to.r - board.length / 2) + Math.abs(move.to.c - board.length / 2) +
     Math.abs(move.arrow.r - board.length / 2) + Math.abs(move.arrow.c - board.length / 2)
-  return evaluate(next, player) - centerPull * 0.2
+  const score = evaluate(board, player) - centerPull * 0.2
+  undoMoveInline(board, move, player)
+  return score
 }
 
-const orderMoves = (board, moves, player, cap) => {
-  const scored = moves.map((move) => ({ move, score: scoreMoveQuick(board, move, player) }))
+const orderMovesInline = (board, moves, player, cap) => {
+  const scored = moves.map((move) => ({ move, score: scoreMoveQuickInline(board, move, player) }))
   scored.sort((a, b) => b.score - a.score)
   return scored.slice(0, cap).map((item) => item.move)
 }
@@ -199,7 +214,7 @@ const initNodeMoves = (node, options) => {
   if (node.untriedMoves) return
   const rawMoves = generateMoves(node.board, node.currentPlayer, options.nodeBeamPerPiece)
   // Reverse once so we can pop() best-scored moves first during expansion.
-  node.untriedMoves = orderMoves(node.board, rawMoves, node.currentPlayer, options.nodeMoveCap).reverse()
+  node.untriedMoves = orderMovesInline(node.board, rawMoves, node.currentPlayer, options.nodeMoveCap).reverse()
   if (node.untriedMoves.length === 0) node.terminal = true
 }
 
@@ -230,7 +245,8 @@ const rolloutPolicy = (board, currentPlayer, options) => {
   const moves = generateMoves(board, currentPlayer, options.rolloutBeamPerPiece)
   if (!moves.length) return null
 
-  const ordered = orderMoves(board, moves, currentPlayer, options.rolloutTopK)
+  // Fast rollout ordering: heavily bounds the sampling
+  const ordered = orderMovesInline(board, moves, currentPlayer, options.rolloutTopK)
   if (!ordered.length) return null
 
   if (Math.random() < options.rolloutGreedyChance) return ordered[0]
@@ -240,7 +256,9 @@ const rolloutPolicy = (board, currentPlayer, options) => {
 }
 
 const simulate = (node, options, stats) => {
-  let board = cloneBoard(node.board)
+  // Use a SINGLE copy of the board per simulation that we mutate inline.
+  // This drastically reduces GC pauses.
+  const board = cloneBoard(node.board)
   let player = node.currentPlayer
   let depth = 0
   if (stats) stats.rollouts += 1
@@ -253,7 +271,7 @@ const simulate = (node, options, stats) => {
       return winner === node.rootPlayer ? 1 : -1
     }
 
-    board = applyMove(board, move, player)
+    applyMoveInline(board, move, player)
     player = getOpponent(player)
     depth += 1
   }
@@ -275,15 +293,17 @@ const backpropagate = (node, value) => {
 export const findBestMoveCarlo = (board, aiPlayer, options = {}) => {
   const returnAnalysis = options.returnAnalysis ?? false
   const opts = {
+    // We can run slightly more iterations thanks to inline simulation fixes.
     timeMs: options.timeMs ?? 2200,
-    maxIterations: options.maxIterations ?? 4500,
+    maxIterations: options.maxIterations ?? 15000, 
     exploration: options.exploration ?? 1.05,
     nodeBeamPerPiece: options.nodeBeamPerPiece ?? 16,
     nodeMoveCap: options.nodeMoveCap ?? 32,
-    rolloutBeamPerPiece: options.rolloutBeamPerPiece ?? 10,
-    rolloutTopK: options.rolloutTopK ?? 10,
+    // Reduced rollout ordering size for fast sampling
+    rolloutBeamPerPiece: options.rolloutBeamPerPiece ?? 8,
+    rolloutTopK: options.rolloutTopK ?? 6,
     rolloutDepth: options.rolloutDepth ?? 12,
-    rolloutGreedyChance: options.rolloutGreedyChance ?? 0.75,
+    rolloutGreedyChance: options.rolloutGreedyChance ?? 0.8,
     pwBase: options.pwBase ?? 2.5,
     pwAlpha: options.pwAlpha ?? 0.52,
   }
@@ -310,7 +330,8 @@ export const findBestMoveCarlo = (board, aiPlayer, options = {}) => {
 
       if (canExpand) {
         const move = node.untriedMoves.pop()
-        const nextBoard = applyMove(node.board, move, node.currentPlayer)
+        const nextBoard = cloneBoard(node.board)
+        applyMoveInline(nextBoard, move, node.currentPlayer)
         const child = makeNode(nextBoard, getOpponent(node.currentPlayer), root.rootPlayer, node, move)
         node.children.push(child)
         stats.expansions += 1
@@ -376,5 +397,4 @@ export const findBestMoveCarlo = (board, aiPlayer, options = {}) => {
       candidates,
     },
   }
-
 }
